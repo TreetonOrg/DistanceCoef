@@ -8,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import mean_squared_error, make_scorer
+from scipy import stats
 
 
 def get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
@@ -79,6 +80,10 @@ def normalization(x):
     return 1 - (float(x) - 1.0) / 4
 
 
+def spearman(a, b):
+    return stats.spearmanr(a, b)[0]
+
+
 def get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=True):
     dataset = pd.read_csv(ratings_filename, header=0, delimiter=";")
     requests_features = read_features(requests_clean_texts_dir)
@@ -90,18 +95,23 @@ def get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, 
         all_sim_vector = [0.0 for _ in range(vector_length)]
         for line_request_features, line_song_features in zip(request_features, song_features):
             sim_vector = [i*j for i, j in zip(line_request_features, line_song_features)]
+            for k in range(len(line_request_features) - 3, len(line_request_features)):
+                sim_vector[k] = 1 - abs(line_request_features[k]-line_request_features[k])
             all_sim_vector = [all_sim_vector[i] + sim_vector[i] for i in range(len(all_sim_vector))]
         all_sim_vector = [all_sim_vector[i]/num_lines for i in range(len(all_sim_vector))]
-        train_data.append([max(all_sim_vector[0:20]), max(all_sim_vector[20:50]), max(all_sim_vector[50:70]), 1.0])
+        train_data.append([max(all_sim_vector[0:20]), max(all_sim_vector[20:50]),
+                           max(all_sim_vector[50:70]), max(all_sim_vector[70:])])
     train_answer = dataset["size"].apply(normalization)
     clf = LinearRegression()
     if do_cv:
         cv = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
-        cv_result = cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(mean_squared_error))
-        print(cv_result, sum(cv_result)/len(cv_result))
+        cv_result_spearman = cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(spearman))
+        cv_result_mse = cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(mean_squared_error))
+        print("Spearman CV: ", cv_result_spearman, sum(cv_result_spearman) / len(cv_result_spearman))
+        print("MSE CV: ", cv_result_mse, sum(cv_result_mse) / len(cv_result_mse))
 
     clf.fit(train_data, train_answer)
-    return list(clf.coef_) + list(clf.predict([0, 0, 0, 0]))
+    return list(clf.coef_) + [clf.intercept_, ]
 
 if __name__ == "__main__":
     ratings_filename = "ratings.csv"
@@ -115,4 +125,4 @@ if __name__ == "__main__":
                      requests_clean_texts_dir + " " +
                      songs_clean_texts_dir + " " +
                      sys.argv[1]])
-    print(get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=False))
+    print("Coefficients:", get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=False))
