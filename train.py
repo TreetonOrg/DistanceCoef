@@ -1,14 +1,15 @@
-import pandas as pd
 import os
 import json
 import subprocess
 import sys
 
+import numpy as np
+import pandas as pd
+from scipy import stats
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import mean_squared_error, make_scorer
-from scipy import stats
 
 
 def get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
@@ -104,11 +105,11 @@ def get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, 
     train_answer = dataset["size"].apply(normalization)
     clf = LinearRegression()
     if do_cv:
-        cv = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
-        cv_result_spearman = cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(spearman))
-        cv_result_mse = cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(mean_squared_error))
-        print("Spearman CV: ", cv_result_spearman, sum(cv_result_spearman) / len(cv_result_spearman))
-        print("MSE CV: ", cv_result_mse, sum(cv_result_mse) / len(cv_result_mse))
+        cv = ShuffleSplit(n_splits=10, test_size=0.2, random_state=0)
+        cv_result_spearman = np.array(cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(spearman)))
+        cv_result_mse = np.array(cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(mean_squared_error)))
+        print("Spearman CV: %0.3f (+/- %0.3f)" % (cv_result_spearman.mean(), cv_result_spearman.std() * 2))
+        print("MSE CV: %0.3f (+/- %0.3f)" % (cv_result_mse.mean(), cv_result_mse.std() * 2))
 
     clf.fit(train_data, train_answer)
     return list(clf.coef_) + [clf.intercept_, ]
@@ -119,10 +120,13 @@ if __name__ == "__main__":
     songs_texts_dir = "songs"
     requests_clean_texts_dir = "request_texts"
     songs_clean_texts_dir = "song_texts"
+    # Получение нужны отрывков.
     get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
                     requests_clean_texts_dir, songs_clean_texts_dir)
+    # Запуск разборов Тритона.
     subprocess.call(['bash', '-c', "sh run_treeton.sh " +
                      requests_clean_texts_dir + " " +
                      songs_clean_texts_dir + " " +
                      sys.argv[1]])
-    print("Coefficients:", get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=False))
+    # Получение коэффициентов.
+    print("Coefficients:", get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=bool(int(sys.argv[2]))))
