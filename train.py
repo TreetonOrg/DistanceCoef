@@ -78,7 +78,11 @@ def read_features(dir_name):
 
 
 def normalization(x):
-    return 1 - (float(x) - 1.0) / 4
+    return 1.0 - ((float(x) - 1.0) / 4) * 0.9
+
+
+def similarity(i, j):
+    return 0.0 if i * j == 0.0 else (1 - abs(i - j))**3
 
 
 def spearman(a, b):
@@ -95,13 +99,13 @@ def get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, 
         num_lines = len(request_features)
         all_sim_vector = [0.0 for _ in range(vector_length)]
         for line_request_features, line_song_features in zip(request_features, song_features):
-            sim_vector = [i*j for i, j in zip(line_request_features, line_song_features)]
+            sim_vector = [similarity(i, j) for i, j in zip(line_request_features, line_song_features)]
             for k in range(len(line_request_features) - 3, len(line_request_features)):
                 sim_vector[k] = 1 - abs(line_request_features[k]-line_request_features[k])
             all_sim_vector = [all_sim_vector[i] + sim_vector[i] for i in range(len(all_sim_vector))]
         all_sim_vector = [all_sim_vector[i]/num_lines for i in range(len(all_sim_vector))]
-        train_data.append([max(all_sim_vector[0:20]), max(all_sim_vector[20:50]),
-                           max(all_sim_vector[50:70]), max(all_sim_vector[70:])])
+        train_data.append([max(all_sim_vector[0:10]), max(all_sim_vector[10:20]), max(all_sim_vector[20:30]),
+                           max(all_sim_vector[50:60]), max(all_sim_vector[60:70]), max(all_sim_vector[70:])])
     train_answer = dataset["size"].apply(normalization)
     clf = LinearRegression()
     if do_cv:
@@ -120,7 +124,7 @@ if __name__ == "__main__":
     songs_texts_dir = "songs"
     requests_clean_texts_dir = "request_texts"
     songs_clean_texts_dir = "song_texts"
-    # Получение нужны отрывков.
+    # Получение нужных отрывков.
     get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
                     requests_clean_texts_dir, songs_clean_texts_dir)
     # Запуск разборов Тритона.

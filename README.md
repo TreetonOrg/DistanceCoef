@@ -34,7 +34,7 @@ python3 train.py <путь к папке c verseProcessingToolDistance.sh> <1, �
 Коэффициенты переносятся в том же порядке!
 Формат в настройках:
 ```
-regressionCoefficients=<coef1>;<coef2>;<coef3>;<coef4>;<coef5>
+regressionCoefficients=<coef1>;<coef2>;<coef3>;<coef4>;<coef5>;<coef6>;<coef7>
 ```
 
 Если нужно добавить данных - нужно менять ratings.csv и презапустить обучение.
