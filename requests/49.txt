@@ -1,4 +1,0 @@
-id:49
-
-#
-[{"plain":"МорОз и сОлнце, дЕнь чудЕсный!","syl":[{"start":0,"length":2,"sylType":"-"},{"start":2,"length":3,"sylType":"+"},{"start":6,"length":1,"sylType":"-"},{"start":8,"length":4,"sylType":"+"},{"start":12,"length":2,"sylType":"-"},{"start":16,"length":4,"sylType":"+"},{"start":21,"length":2,"sylType":"-"},{"start":23,"length":3,"sylType":"+"},{"start":26,"length":3,"sylType":"-"}]},{"plain":"ЕщЁ ты дрЕмлешь, дрУг прелЕстный:","syl":[{"start":0,"length":1,"sylType":"-"},{"start":1,"length":2,"sylType":"+"},{"start":4,"length":2,"sylType":"+"},{"start":7,"length":4,"sylType":"+"},{"start":11,"length":4,"sylType":"-"},{"start":17,"length":4,"sylType":"+"},{"start":22,"length":3,"sylType":"-"},{"start":25,"length":3,"sylType":"+"},{"start":28,"length":4,"sylType":"-"}]}]

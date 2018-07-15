@@ -1,84 +1,46 @@
 import os
-import json
 import subprocess
-import sys
+import argparse
+from enum import Enum
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+from flags import Flags
+
+from sklearn.model_selection import cross_val_score, cross_val_predict, ShuffleSplit
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import ShuffleSplit
-from sklearn.metrics import mean_squared_error, make_scorer
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.svm import LinearSVC, LinearSVR
+from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score, \
+    confusion_matrix, precision_score, recall_score, f1_score
+from sklearn.feature_extraction.text import CountVectorizer
 
 
-def get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
-                    requests_clean_texts_dir, songs_clean_texts_dir):
-    dataset = pd.read_csv(ratings_filename, header=0, delimiter=";")
-    requests = {}
-    for filename in os.listdir(requests_texts_dir):
-        with open(os.path.join(requests_texts_dir, filename), "r", encoding="utf-8") as f:
-            request_id = int(filename.split(".")[0])
-            text = f.read()
-            text = '{"item": ' + text.split("#")[1] + '}'
-            clean_text = ""
-            for line in json.loads(text)['item']:
-                line_text = line['plain']
-                clean_text += line_text + "\n"
-            requests[request_id] = clean_text.strip()
-
-    songs = {}
-    for filename in os.listdir(songs_texts_dir):
-        with open(os.path.join(songs_texts_dir, filename), "r", encoding="utf-8") as f:
-            song_id = int(filename.split(".")[0])
-            text = f.read().split("#")[1].strip()
-            songs[song_id] = text
-    dataset_requests = dataset["requestId"].tolist()
-    targets = [requests[request_id] for request_id in dataset_requests]
-
-    dataset_songs = dataset["songId"].tolist()
-    shifts = dataset["shift"].tolist()
-
-    sources = []
-    for i, song_id in enumerate(dataset_songs):
-        fragment = "\n".join(songs[song_id].split("\n")[shifts[i]:])
-        lines = []
-        for line in fragment.split("\n"):
-            if len(line) != 0:
-                lines.append(line)
-        fragment = "\n".join(lines)
-        fragment = "\n".join(fragment.split("\n")[:len(targets[i].split("\n"))])
-        sources.append(fragment)
-
-    os.makedirs(songs_clean_texts_dir, exist_ok=True)
-    os.makedirs(requests_clean_texts_dir, exist_ok=True)
-    for i in range(len(targets)):
-        source = sources[i]
-        target = targets[i]
-        with open(os.path.join(songs_clean_texts_dir, str(i) + ".txt"), "w") as f:
-            f.write(source)
-        with open(os.path.join(requests_clean_texts_dir, str(i) + ".txt"), "w") as f:
-            f.write(target)
+class Mode(Enum):
+    REGRESSOR = 0
+    CLASSIFIER = 1
 
 
-def read_features(dir_name):
-    features = dict()
-    for filename in os.listdir(dir_name):
-        sample_features = []
-        if ".meta" not in filename:
-            continue
-        with open(os.path.join(dir_name, filename), "r") as f:
-            lines = f.readlines()[1:]
-            for line in lines:
-                line_feature = [float(num) for num in line.split("(")[1].strip()[:-1].split(";")]
-                sample_features.append(line_feature)
-        features[int(filename.split(".")[0])] = sample_features
-    features = [features[i] for i in range(len(features))]
-    return features
+class Classifier(Enum):
+    LINEAR_SVC = 0
+    DECISION_TREE = 1
+    RANDOM_FOREST = 2
 
 
-def normalization(x):
-    return 1.0 - ((float(x) - 1.0) / 4) * 0.9
+class Regressor(Enum):
+    LINEAR_REGRESSION = 0
+    LINEAR_SVR = 1
+    DECISION_TREE = 2
+    RANDOM_FOREST = 3
+
+
+class Features(Flags):
+    TREETON_BASE = 1
+    TREETON_AGG = 2
+    MANUAL = 4
+    CHAR_GRAMS = 8
 
 
 def similarity(i, j):
@@ -89,48 +51,203 @@ def spearman(a, b):
     return stats.spearmanr(a, b)[0]
 
 
-def get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=True):
-    dataset = pd.read_csv(ratings_filename, header=0, delimiter=";")
-    requests_features = read_features(requests_clean_texts_dir)
-    songs_features = read_features(songs_clean_texts_dir)
-    train_data = []
-    vector_length = len(requests_features[0][0])
-    for request_features, song_features in zip(requests_features, songs_features):
-        num_lines = len(request_features)
-        all_sim_vector = [0.0 for _ in range(vector_length)]
-        for line_request_features, line_song_features in zip(request_features, song_features):
-            sim_vector = [similarity(i, j) for i, j in zip(line_request_features, line_song_features)]
-            for k in range(len(line_request_features) - 3, len(line_request_features)):
-                sim_vector[k] = 1 - abs(line_request_features[k]-line_request_features[k])
-            all_sim_vector = [all_sim_vector[i] + sim_vector[i] for i in range(len(all_sim_vector))]
-        all_sim_vector = [all_sim_vector[i]/num_lines for i in range(len(all_sim_vector))]
-        train_data.append([max(all_sim_vector[0:10]), max(all_sim_vector[10:20]), max(all_sim_vector[20:30]),
-                           max(all_sim_vector[50:60]), max(all_sim_vector[60:70]), max(all_sim_vector[70:])])
-    train_answer = dataset["size"].apply(normalization)
-    clf = LinearRegression()
-    if do_cv:
-        cv = ShuffleSplit(n_splits=10, test_size=0.2, random_state=0)
-        cv_result_spearman = np.array(cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(spearman)))
-        cv_result_mse = np.array(cross_val_score(clf, train_data, train_answer, cv=cv, scoring=make_scorer(mean_squared_error)))
-        print("Spearman CV: %0.3f (+/- %0.3f)" % (cv_result_spearman.mean(), cv_result_spearman.std() * 2))
-        print("MSE CV: %0.3f (+/- %0.3f)" % (cv_result_mse.mean(), cv_result_mse.std() * 2))
+def count_vowels(text):
+    return len([ch for ch in text if ch in "АЕЁИОУЭЮЯаеёиоуэюя"])
 
-    clf.fit(train_data, train_answer)
-    return list(clf.coef_) + [clf.intercept_, ]
 
-if __name__ == "__main__":
-    ratings_filename = "ratings.csv"
-    requests_texts_dir = "requests"
-    songs_texts_dir = "songs"
-    requests_clean_texts_dir = "request_texts"
-    songs_clean_texts_dir = "song_texts"
-    # Получение нужных отрывков.
-    get_clean_texts(ratings_filename, requests_texts_dir, songs_texts_dir,
-                    requests_clean_texts_dir, songs_clean_texts_dir)
-    # Запуск разборов Тритона.
-    subprocess.call(['bash', '-c', "sh run_treeton.sh " +
-                     requests_clean_texts_dir + " " +
-                     songs_clean_texts_dir + " " +
-                     sys.argv[1]])
-    # Получение коэффициентов.
-    print("Coefficients:", get_coef(ratings_filename, requests_clean_texts_dir, songs_clean_texts_dir, do_cv=bool(int(sys.argv[2]))))
+def read_features(dir_name):
+    file_names = os.listdir(dir_name)
+    file_names = list(filter(lambda x: x.endswith(".meta"), file_names))
+    features = [[] for _ in range(len(file_names))]
+    for filename in file_names:
+        with open(os.path.join(dir_name, filename), "r") as f:
+            line_features = list(map(float, f.readlines()[1].split("(")[1].strip()[:-1].split(";")))
+            features[int(filename.split(".")[0])] = line_features
+    return np.array(features)
+
+
+def collect_featrues(
+        data,
+        treeton_output_dir,
+        normalization,
+        treeton_distrib_dir,
+        feature_flags,
+        rewrite_cache=False):
+
+    if Features.TREETON_BASE in feature_flags or Features.TREETON_AGG in feature_flags:
+        if not os.path.exists(treeton_output_dir):
+            os.mkdir(treeton_output_dir)
+
+        left_dir = os.path.join(treeton_output_dir, "left")
+        if not os.path.exists(left_dir):
+            os.mkdir(left_dir)
+        for i, line in enumerate(data["left"]):
+            file_name = os.path.join(left_dir, str(i) + ".txt")
+            with open(file_name, "w", encoding="utf-8") as f:
+                f.write(line)
+
+        right_dir = os.path.join(treeton_output_dir, "right")
+        if not os.path.exists(right_dir):
+            os.mkdir(right_dir)
+        for i, line in enumerate(data["right"]):
+            file_name = os.path.join(right_dir, str(i) + ".txt")
+            with open(file_name, "w", encoding="utf-8") as f:
+                f.write(line)
+
+        # Запуск разборов Тритона.
+        right_is_calculated = len(os.listdir(right_dir)) == 2 * data["right"].size
+        left_is_calculated = len(os.listdir(left_dir)) == 2 * data["left"].size
+        if not left_is_calculated or not right_is_calculated or rewrite_cache:
+            subprocess.call(['bash', '-c', "sh run_treeton.sh " +
+                             " ".join([left_dir, right_dir, treeton_distrib_dir])])
+
+        left_features = read_features(left_dir)
+        right_features = read_features(right_dir)
+        features_len = left_features.shape[1]
+
+        left_columns = ["left_" + str(i) for i in range(features_len)]
+        right_columns = ["right_" + str(i) for i in range(features_len)]
+        sim_columns = ["sim_" + str(i) for i in range(features_len)]
+
+        left_features = pd.DataFrame(left_features, columns=left_columns)
+        data = pd.concat([data, left_features], axis=1)
+        right_features = pd.DataFrame(right_features, columns=right_columns)
+        data = pd.concat([data, right_features], axis=1)
+
+        for feature_index in range(features_len - 3):
+            left_column = data["left_" + str(feature_index)].tolist()
+            right_column = data["right_" + str(feature_index)].tolist()
+            sim_vector = [similarity(l, r) for l, r in zip(left_column, right_column)]
+            data["sim_" + str(feature_index)] = sim_vector
+        for feature_index in range(features_len - 3, features_len):
+            left_column = data["left_" + str(feature_index)].tolist()
+            right_column = data["right_" + str(feature_index)].tolist()
+            sim_vector = [1 - abs(l-r) for l, r in zip(left_column, right_column)]
+            data["sim_" + str(feature_index)] = sim_vector
+
+        if Features.TREETON_AGG in feature_flags:
+            data["max_sim_0_10"] = pd.DataFrame(data, columns=sim_columns[:10]).max(axis=1)
+            data["max_sim_10_20"] = pd.DataFrame(data, columns=sim_columns[10:20]).max(axis=1)
+            data["max_sim_20_30"] = pd.DataFrame(data, columns=sim_columns[20:30]).max(axis=1)
+            data["max_sim_50_60"] = pd.DataFrame(data, columns=sim_columns[50:60]).max(axis=1)
+            data["max_sim_60_70"] = pd.DataFrame(data, columns=sim_columns[60:70]).max(axis=1)
+            data["max_sim_70_73"] = pd.DataFrame(data, columns=sim_columns[70:]).max(axis=1)
+        if Features.TREETON_BASE not in feature_flags:
+            data.drop(left_columns + right_columns + sim_columns, axis=1, inplace=True)
+
+    if Features.MANUAL in feature_flags:
+        data["left_vowels"] = data["left"].apply(count_vowels)
+        data["right_vowels"] = data["right"].apply(count_vowels)
+        data["left_len"] = data["left"].apply(len)
+        data["right_len"] = data["right"].apply(len)
+        data["vowels_diff"] = (data["left_vowels"] - data["right_vowels"]).apply(abs)
+        data["len_diff"] = (data["left_len"] - data["right_len"]).apply(abs)
+
+    if Features.CHAR_GRAMS in feature_flags:
+        char_vectorizer = CountVectorizer(analyzer="char", ngram_range=(1, 2))
+        char_vectorizer.fit(data["left"] + data["right"])
+        left_char_features = char_vectorizer.transform(data["left"]).todense()
+        right_char_features = char_vectorizer.transform(data["right"]).todense()
+        data = pd.concat([data, pd.DataFrame(left_char_features)], axis=1)
+        data = pd.concat([data, pd.DataFrame(right_char_features)], axis=1)
+
+    data["score"] = data["aleksej_score"].map(normalization)
+    answer = data["score"].tolist()
+
+    data.drop(["score", "aleksej_score", "left", "right"], axis=1, inplace=True)
+    return data, answer
+
+
+def train(data, answer, mode, model_type):
+    if mode == Mode.REGRESSOR:
+        if model_type == Regressor.DECISION_TREE:
+            model = DecisionTreeRegressor()
+        elif model_type == Regressor.LINEAR_REGRESSION:
+            model = LinearRegression()
+        elif model_type == Regressor.LINEAR_SVR:
+            model = LinearSVR()
+        elif model_type == Regressor.RANDOM_FOREST:
+            model = RandomForestRegressor()
+        else:
+            raise NotImplementedError("Regressor is not bound")
+
+        metrics = (spearman, mean_squared_error)
+    elif mode == Mode.CLASSIFIER:
+        if model_type == Classifier.RANDOM_FOREST:
+            model = RandomForestClassifier()
+        elif model_type == Classifier.DECISION_TREE:
+            model = DecisionTreeClassifier()
+        elif model_type == Classifier.LINEAR_SVC:
+            model = LinearSVC()
+        else:
+            raise NotImplementedError("Regressor is not bound")
+
+        metrics = (confusion_matrix, accuracy_score, precision_score, recall_score, f1_score)
+    else:
+        assert False
+
+    cv = ShuffleSplit(n_splits=10, test_size=0.2, random_state=42)
+    for metric in metrics:
+        answer_pred = cross_val_predict(model, data, answer, cv=5)
+        if metric == confusion_matrix:
+            confusions = confusion_matrix(answer, answer_pred)
+            print(metric.__name__)
+            print(confusions)
+            print()
+        elif metric in (precision_score, recall_score, f1_score):
+            print(metric.__name__)
+            print(metric(answer, answer_pred, average=None))
+            print()
+        else:
+            scoring = make_scorer(metric)
+            cv_result = np.array(cross_val_score(model, data, answer, cv=cv, scoring=scoring))
+            print("%s CV: %0.3f (+/- %0.3f)" % (metric.__name__, cv_result.mean(), cv_result.std() * 2))
+            print()
+    model.fit(data, answer)
+    return model
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Rhythmic similarity regressors')
+    parser.add_argument("--data-dir", type=str, required=True)
+    parser.add_argument("--treeton-distrib-dir", type=str, required=True)
+    parser.add_argument("--treeton-temp-dir", type=str, default="treeton")
+    parser.add_argument("--mode", type=int, default=0)
+    parser.add_argument("--model-type", type=int, default=0)
+    parser.add_argument("--features", type=int, default=2)
+    args = parser.parse_args()
+
+    mode = Mode(args.mode)
+    model_type = Classifier(args.model_type) if mode == Mode.CLASSIFIER else Regressor(args.model_type)
+
+    feature_flags = Features(args.features)
+
+    normalization = lambda x: x
+    if mode == Mode.REGRESSOR:
+        normalization = lambda x: 1.0 - ((float(x) - 1.0) / 4)
+
+    data_file_names = os.listdir(args.data_dir)
+    data_file_names = list(filter(lambda x: x.endswith(".tsv"), data_file_names))
+
+    all_data = []
+    for i, file_name in enumerate(data_file_names):
+        all_data.append(pd.read_csv(os.path.join(args.data_dir, file_name), sep="\t", header=0))
+
+    data, answer = collect_featrues(
+        data=pd.concat(all_data, axis=0, ignore_index=True),
+        treeton_output_dir=args.treeton_temp_dir,
+        treeton_distrib_dir=args.treeton_distrib_dir,
+        normalization=normalization,
+        feature_flags=feature_flags)
+
+    print("Counts")
+    print(np.histogram(answer, bins=5)[0])
+    print()
+
+    model = train(data, answer, mode, model_type)
+    if mode == Mode.REGRESSOR or model_type == Regressor.LINEAR_REGRESSION:
+        print("Coefficients")
+        print(list(model.coef_) + [model.intercept_, ])
+
+
+main()

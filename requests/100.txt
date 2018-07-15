@@ -1,4 +1,0 @@
-id:100
-
-#
-[{"plain":"Меня зовут Шнур,","syl":[{"start":0,"length":2,"sylType":"-"},{"start":2,"length":2,"sylType":"+"},{"start":5,"length":2,"sylType":"-"},{"start":7,"length":3,"sylType":"+"},{"start":11,"length":4,"sylType":"+"}]},{"plain":"Меня зовут Шнур.","syl":[{"start":0,"length":2,"sylType":"-"},{"start":2,"length":2,"sylType":"+"},{"start":5,"length":2,"sylType":"-"},{"start":7,"length":3,"sylType":"+"},{"start":11,"length":4,"sylType":"+"}]},{"plain":"Я приду к тебе во снах, ","syl":[{"start":0,"length":1,"sylType":"+"},{"start":2,"length":3,"sylType":"-"},{"start":5,"length":2,"sylType":"+"},{"start":10,"length":2,"sylType":"-"},{"start":12,"length":2,"sylType":"+"},{"start":15,"length":2,"sylType":"-"},{"start":18,"length":4,"sylType":"+"}]},{"plain":"мон амур","syl":[{"start":0,"length":3,"sylType":"+"},{"start":4,"length":1,"sylType":"-"},{"start":5,"length":3,"sylType":"+"}]}]

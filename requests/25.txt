@@ -1,4 +1,0 @@
-id:25
-
-#
-[{"plain":"ветер, ветер, ты могуч,","syl":[{"start":0,"length":2,"sylType":"+"},{"start":2,"length":3,"sylType":"-"},{"start":7,"length":2,"sylType":"+"},{"start":9,"length":3,"sylType":"-"},{"start":14,"length":2,"sylType":"+"},{"start":17,"length":2,"sylType":"-"},{"start":19,"length":3,"sylType":"+"}]},{"plain":"ты гоняешь стаи туч","syl":[{"start":0,"length":2,"sylType":"+"},{"start":3,"length":2,"sylType":"-"},{"start":5,"length":2,"sylType":"+"},{"start":7,"length":3,"sylType":"-"},{"start":11,"length":3,"sylType":"+"},{"start":14,"length":1,"sylType":"-"},{"start":16,"length":3,"sylType":"+"}]}]
