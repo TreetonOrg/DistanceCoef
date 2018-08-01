@@ -3,7 +3,7 @@
 ### Выводы
 * Текущий результат: https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_2.csv, linear_regression: 0.080 MSE, 0.705 корреляция
 * Лучший результат:  https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_1.csv, xgboost: 0.053 MSE, 0.799 корреляция.
-* Для внедрения нужна реализация или обёртка бустинга под Java. Непонятно, насколько это нужно, возможный выигрыш: MSE 0.080 -> 0.053, Spearman 0.705 -> 0.799
+* Для внедрения нужна реализация или обёртка бустинга под Java (например http://xgboost.readthedocs.io/en/latest/jvm/java_intro.html). Непонятно, насколько это нужно, возможный выигрыш: MSE 0.080 -> 0.053, Spearman 0.705 -> 0.799
 * Линейная регрессия всех выходах Тритона (https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_1.csv) даёт лучший коэффициент коррелляции Спирмена, но иногда выбрасывает сильно за пределы от 0 до 1, и MSE ужасный.
 
 ### Файлы и директории
