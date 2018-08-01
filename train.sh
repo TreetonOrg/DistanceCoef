@@ -1,1 +1,1 @@
-python3 train.py --data-dir data --model-type 0 --features 2 --treeton-distrib-dir $1
+python3 train.py --treeton-distrib-dir $1

@@ -3,3 +3,4 @@ scipy >= 0.19.1
 scikit-learn >= 0.18.2
 pandas >= 0.18.1
 py-flags>=1.1.2
+xgboost>=0.72.1

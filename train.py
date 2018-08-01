@@ -1,10 +1,12 @@
 import os
 import subprocess
 import argparse
-from enum import Enum
+from enum import IntEnum
+from collections import Counter
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy import stats
 from flags import Flags
 
@@ -16,24 +18,30 @@ from sklearn.svm import LinearSVC, LinearSVR
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score, \
     confusion_matrix, precision_score, recall_score, f1_score
 from sklearn.feature_extraction.text import CountVectorizer
+from xgboost import XGBRegressor, XGBClassifier
+from sklearn.manifold import TSNE
 
 
-class Mode(Enum):
+class Mode(IntEnum):
     REGRESSOR = 0
     CLASSIFIER = 1
 
 
-class Classifier(Enum):
+class Classifier(IntEnum):
     LINEAR_SVC = 0
     DECISION_TREE = 1
     RANDOM_FOREST = 2
+    XGBOOST = 3
+    ALL = 4
 
 
-class Regressor(Enum):
+class Regressor(IntEnum):
     LINEAR_REGRESSION = 0
     LINEAR_SVR = 1
     DECISION_TREE = 2
     RANDOM_FOREST = 3
+    XGBOOST = 4
+    ALL = 5
 
 
 class Features(Flags):
@@ -158,6 +166,30 @@ def collect_featrues(
     return data, answer
 
 
+def plot(data_column, name, y_true, y_pred, step=0.05):
+    num_steps = int(max(data_column) // step) + 1
+
+    x = [step * float(i) for i in range(num_steps)]
+    s_true = [0 for _ in range(num_steps)]
+    counts = [0 for _ in range(num_steps)]
+    s_pred = [0 for _ in range(num_steps)]
+
+    value_to_bin = lambda x: int(x // step)
+    for i, value in enumerate(data_column):
+        s_true[value_to_bin(value)] += y_true[i]
+        s_pred[value_to_bin(value)] += y_pred[i]
+        counts[value_to_bin(value)] += 1
+
+    s_true = [v / counts[i] if counts[i] != 0 else 0 for i, v in enumerate(s_true)]
+    s_pred = [v / counts[i] if counts[i] != 0 else 0 for i, v in enumerate(s_pred)]
+
+    pred = plt.scatter(x, s_pred, c='b', marker="s", label='pred')
+    true = plt.scatter(x, s_true, c='r', marker="o", label='true')
+    plt.legend(handles=[pred, true])
+    plt.savefig(os.path.join("results", name + ".png"))
+    plt.close()
+
+
 def train(data, answer, mode, model_type):
     if mode == Mode.REGRESSOR:
         if model_type == Regressor.DECISION_TREE:
@@ -167,18 +199,22 @@ def train(data, answer, mode, model_type):
         elif model_type == Regressor.LINEAR_SVR:
             model = LinearSVR()
         elif model_type == Regressor.RANDOM_FOREST:
-            model = RandomForestRegressor()
+            model = RandomForestRegressor(max_depth=6, n_estimators=100)
+        elif model_type == Regressor.XGBOOST:
+            model = XGBRegressor(max_depth=6, n_estimators=100, subsample=0.9)
         else:
             raise NotImplementedError("Regressor is not bound")
 
         metrics = (spearman, mean_squared_error)
     elif mode == Mode.CLASSIFIER:
         if model_type == Classifier.RANDOM_FOREST:
-            model = RandomForestClassifier()
+            model = RandomForestClassifier(max_depth=6, n_estimators=100)
         elif model_type == Classifier.DECISION_TREE:
             model = DecisionTreeClassifier()
         elif model_type == Classifier.LINEAR_SVC:
             model = LinearSVC()
+        elif model_type == Classifier.XGBOOST:
+            model = XGBClassifier(max_depth=6, n_estimators=100, subsample=0.9)
         else:
             raise NotImplementedError("Regressor is not bound")
 
@@ -186,30 +222,36 @@ def train(data, answer, mode, model_type):
     else:
         assert False
 
+    result_metrics = {"model_type": model_type.name.lower()}
+    answer_pred = cross_val_predict(model, data, answer, cv=5)
+
+    headers = data.dtypes.index
+    for i in range(len(headers)):
+        plot(data_column=data[data.columns[i]], y_true=answer, y_pred=answer_pred, name=headers[i])
+
     cv = ShuffleSplit(n_splits=10, test_size=0.2, random_state=42)
     for metric in metrics:
-        answer_pred = cross_val_predict(model, data, answer, cv=5)
         if metric == confusion_matrix:
             confusions = confusion_matrix(answer, answer_pred)
-            print(metric.__name__)
-            print(confusions)
-            print()
+            result_metrics[metric.__name__] = confusions
         elif metric in (precision_score, recall_score, f1_score):
-            print(metric.__name__)
-            print(metric(answer, answer_pred, average=None))
-            print()
+            result_metrics[metric.__name__] = metric(answer, answer_pred, average=None)
         else:
             scoring = make_scorer(metric)
             cv_result = np.array(cross_val_score(model, data, answer, cv=cv, scoring=scoring))
-            print("%s CV: %0.3f (+/- %0.3f)" % (metric.__name__, cv_result.mean(), cv_result.std() * 2))
-            print()
+            result_metrics[metric.__name__ + "_mean"] = cv_result.mean()
+            result_metrics[metric.__name__ + "_std"] = cv_result.std()
+    for metric_name, value in result_metrics.items():
+        print(metric_name)
+        print(value)
+    print()
     model.fit(data, answer)
-    return model
+    return model, result_metrics
 
 
 def main():
     parser = argparse.ArgumentParser(description='Rhythmic similarity regressors')
-    parser.add_argument("--data-dir", type=str, required=True)
+    parser.add_argument("--data-dir", type=str, default="data")
     parser.add_argument("--treeton-distrib-dir", type=str, required=True)
     parser.add_argument("--treeton-temp-dir", type=str, default="treeton")
     parser.add_argument("--mode", type=int, default=0)
@@ -244,10 +286,23 @@ def main():
     print(np.histogram(answer, bins=5)[0])
     print()
 
-    model = train(data, answer, mode, model_type)
-    if mode == Mode.REGRESSOR or model_type == Regressor.LINEAR_REGRESSION:
-        print("Coefficients")
-        print(list(model.coef_) + [model.intercept_, ])
-
+    use_all_regressors = mode == Mode.REGRESSOR and model_type == Regressor.ALL
+    use_all_classifiers = mode == Mode.CLASSIFIER and model_type == Classifier.ALL
+    if use_all_regressors or use_all_classifiers:
+        metrics = []
+        for t in range(int(model_type)):
+            t = Classifier(t) if mode == Mode.CLASSIFIER else Regressor(t)
+            _, result_metrics = train(data, answer, mode, t)
+            metrics.append(result_metrics)
+        metrics_df = pd.DataFrame(metrics)
+        if not os.path.exists("results"):
+            os.mkdir("results")
+        metrics_df.to_csv(os.path.join("results", mode.name.lower() + "_" + str(args.features) + ".csv"), index=None)
+        print(metrics_df.head())
+    else:
+        model, result_metrics = train(data, answer, mode, model_type)
+        if mode == Mode.REGRESSOR and model_type == Regressor.LINEAR_REGRESSION:
+            print("Coefficients:")
+            print(";".join([str(i) for i in list(model.coef_) + [model.intercept_, ]]))
 
 main()
