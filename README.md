@@ -1,5 +1,10 @@
 # DistanceCoef
 
+### Выводы
+* Текущий результат: https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_2.csv, linear_regression: 0.080 MSE, 0.705 корреляция
+* Лучший результат:  https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_1.csv, xgboost: 0.053 MSE, 0.799 корреляция
+* Линейная регрессия всех выходах Тритона (https://github.com/TreetonOrg/DistanceCoef/blob/master/results/regressor_1.csv) даёт лучший коэффициент коррелляции Спирмена, но иногда выбрасывает сильно за пределы от 0 до 1, и MSE ужасный.
+
 ### Файлы и директории
 * data - папка с входными tsv файлами.
 * run_treeton.sh - скрипт, запускающий разборы папок.
@@ -45,10 +50,6 @@
 * 5 - MANUAL + TREETON_BASE
 * 6 - MANUAL + TREETON_AGG
 * 7 - MANUAL + TREETON_AGG + TREETON_BASE
-
-Если коротко:
-* Текущий результат, regressor_2.csv, linear_regression: 0.080 MSE, 0.705 корреляция
-* Лучший результат, regressor_1.csv, xgboost: 0.053 MSE, 0.799 корреляция
 
 ### Использование
 Установка зависимостей:
