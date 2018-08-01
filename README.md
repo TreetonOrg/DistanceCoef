@@ -46,8 +46,9 @@
 * 6 - MANUAL + TREETON_AGG
 * 7 - MANUAL + TREETON_AGG + TREETON_BASE
 
-Текущий результат, regressor_2.csv, linear_regression: 0.080 MSE, 0.705 корреляция
-Лучший результат, regressor_1.csv, xgboost: 0.053 MSE, 0.799 корреляция
+Если коротко:
+* Текущий результат, regressor_2.csv, linear_regression: 0.080 MSE, 0.705 корреляция
+* Лучший результат, regressor_1.csv, xgboost: 0.053 MSE, 0.799 корреляция
 
 ### Использование
 Установка зависимостей:
